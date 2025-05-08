@@ -1,0 +1,89 @@
+name: "CodeQL Advanced Security Analysis"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Run weekly at 08:39 UTC every Monday
+    - cron: '39 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: "CodeQL Scan (${{ matrix.language }})"
+    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
+    timeout-minutes: 45  # Enforce timeout to prevent stuck jobs
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          # Add additional languages below
+          # - language: python
+          #   build-mode: none
+          # - language: java-kotlin
+          #   build-mode: manual
+          # - language: c-cpp
+          #   build-mode: manual
+          # - language: go
+          #   build-mode: manual
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history may be required for some analysis
+
+      # Optional runtime setup (Node, Java, Python, etc.)
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '20'
+
+      # Optional: Install dependencies before CodeQL init
+      # - name: Install Dependencies
+      #   run: npm ci
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+          # Example: queries: +security-extended,security-and-quality
+
+      - name: Manual Build Commands (if required)
+        if: matrix.build-mode == 'manual'
+        shell: bash
+        run: |
+          echo "Starting manual build for ${{ matrix.language }}..."
+          echo "Replace the following with real commands:"
+          echo "npm ci && npm run build || make build"
+          exit 1  # Remove or modify once build is implemented
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+          output: results-${{ matrix.language }}.sarif
+
+      - name: Upload SARIF Report as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-results-${{ matrix.language }}
+          path: results-${{ matrix.language }}.sarif
+
+      - name: Notify on Failure
+        if: failure()
+        run: echo "CodeQL scan failed for ${{ matrix.language }}. Review logs for details."
